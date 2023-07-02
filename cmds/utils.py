@@ -25,7 +25,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-
+import matplotlib.patheffects as PathEffects
 
 # --------------------
 # REGRESSION FUNCTIONS
@@ -387,7 +387,171 @@ def calc_mv_portfolio(mean_rets, cov_matrix, target=None):
 # not use, but are used to illustrate some of the
 # concepts in the class, via TA code.
 # -----------------------------------------------
-# TBD.
 
-if __name__ == "__main__":
-    print("Loaded utils.py")
+
+def plot_capm_regression(assets, market, adj=12):
+    """
+    Plot CAPM regressions on a scatter plot.
+
+    Args:
+        assets : DataFrame of asset returns.
+        market : DataFrame of market returns.
+        adj (int, optional): Annualization. Defaults to 12.
+
+    Returns:
+        fig, ax: Figure and axes objects for the plot.
+    """
+    fig, ax = plt.subplots(figsize=(8, 6))
+    betas = []
+    means = []
+
+    market_const = sm.add_constant(market)
+    for asset in assets.columns:
+        regr = sm.OLS(assets[asset], market_const).fit()
+        ax.scatter(regr.params[1], assets[asset].mean() * adj, label=asset, zorder=2)
+        ax.annotate(asset, (regr.params[1], assets[asset].mean() * adj), zorder=3)
+        betas.append(regr.params[1])
+        means.append(assets[asset].mean() * adj)
+
+    ax.plot([0, 1.4], [0, market.mean()[0] * adj * 1.4], c="black", zorder=1, alpha=0.5)
+    beta_mean_regr = sm.OLS(means, sm.add_constant(betas)).fit()
+
+    ax.plot(
+        np.arange(0, 1.6, 0.1),
+        beta_mean_regr.params[0] + beta_mean_regr.params[1] * np.arange(0, 1.6, 0.1),
+        zorder=1,
+        alpha=0.7,
+    )
+
+    ax.set_yticks(np.arange(0, 0.15, 0.02))
+    ax.set_xticks(np.arange(0, 1.6, 0.2))
+    ax.set_title("Mean Return vs. Beta")
+    ax.set_xlabel("Beta")
+    ax.set_ylabel("Mean Return")
+    fig.tight_layout()
+    return fig, ax
+
+
+def plot_mv_frontier(rets, delta=2, plot_tan=True, adj=12):
+    """
+    Plot MV frontier, and the tangency and GMV portfolios.
+
+    Args:
+        rets : Returns DataFrame
+        delta (int, optional): Delta range (from -delta to +delta). Defaults to 2. Use to make
+                                the plot look nicer, and keep the MV frontier within a reasonable range.
+        plot_tan (bool, optional): Set to False if the tangency gives an extreme value. Defaults to True.
+        adj (int, optional): Annualization. Defaults to 12.
+
+    Returns:
+        fig, ax: Figure and axes objects for the plot.
+    """
+    omega_tan = pd.Series(
+        calc_tangency_portfolio(rets.mean(), rets.cov()), index=rets.columns
+    )
+
+    omega_gmv = pd.Series(calc_gmv_portfolio(rets.cov()), index=rets.columns)
+    omega = pd.concat([omega_tan, omega_gmv], axis=1)
+    omega.columns = ["tangency", "gmv"]
+
+    delta_grid = np.linspace(-delta, delta, 150)
+    mv_frame = pd.DataFrame(columns=["mean", "vol"], index=delta_grid)
+    for i, delta in enumerate(delta_grid):
+        omega_mv = delta * omega_tan + (1 - delta) * omega_gmv
+        rets_p = rets @ omega_mv
+        mv_frame["mean"].iloc[i] = rets_p.mean() * adj
+        mv_frame["vol"].iloc[i] = rets_p.std() * np.sqrt(adj)
+
+    rets_special = pd.DataFrame(index=rets.index)
+    rets_special["tan"] = rets @ omega_tan.values
+    rets_special["gmv"] = rets @ omega_gmv.values
+
+    mv_assets = pd.concat([rets.mean() * adj, rets.std() * np.sqrt(adj)], axis=1)
+    mv_special = pd.concat(
+        [rets_special.mean() * adj, rets_special.std() * np.sqrt(adj)], axis=1
+    )
+    mv_assets.columns = ["mean", "vol"]
+    mv_special.columns = ["mean", "vol"]
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    ax.plot(
+        mv_frame["vol"],
+        mv_frame["mean"],
+        c="k",
+        linewidth=3,
+        label="MV Frontier",
+        zorder=1,
+    )
+    if plot_tan:
+        ax.scatter(
+            mv_special["vol"][0],
+            mv_special["mean"][0],
+            c="g",
+            linewidth=3,
+            label="Tangency Portfolio",
+        )
+        text = ax.text(
+            x=mv_special["vol"][0] + 0.0005,
+            y=mv_special["mean"][0] + 0.0005,
+            s="Tangency",
+            fontsize=11,
+            c="w",
+        )
+        text.set_path_effects([PathEffects.withStroke(linewidth=2, foreground="black")])
+
+    ax.scatter(
+        mv_special["vol"][1],
+        mv_special["mean"][1],
+        c="r",
+        linewidth=3,
+        label="GMV Portfolio",
+    )
+    text = ax.text(
+        x=mv_special["vol"][1] + 0.0005,
+        y=mv_special["mean"][1] + 0.0005,
+        s="GMV",
+        fontsize=11,
+        c="w",
+    )
+    text.set_path_effects([PathEffects.withStroke(linewidth=2, foreground="black")])
+    ax.scatter(
+        mv_assets["vol"],
+        mv_assets["mean"],
+        c="b",
+        linewidth=3,
+        label="Individual Assets",
+    )
+
+    for i in range(mv_assets.shape[0]):
+        text = ax.text(
+            x=mv_assets["vol"][i] + 0.0005,
+            y=mv_assets["mean"][i] + 0.0005,
+            s=mv_assets.index[i],
+            fontsize=11,
+            c="w",
+        )
+        text.set_path_effects([PathEffects.withStroke(linewidth=2, foreground="black")])
+    ax.set_xlabel("Volatility (Annualized)")
+    ax.set_ylabel("Mean (Annualized)")
+    fig.tight_layout()
+    return fig, ax
+
+
+def plot_pairplot(rets):
+    """
+    Plot a pairplot of returns. Add a vertical line at 0 -- this is useful
+    for visualizing the skewness of the returns.
+
+    Args:
+        rets (_type_): _description_
+
+    Returns:
+        axes : Axes object for the plot.
+    """
+
+    axes = sns.pairplot(rets, diag_kind="kde", plot_kws={"alpha": 0.5})
+    for _, ax in enumerate(axes.diag_axes):
+        ax.axvline(0, c="k", lw=1, alpha=0.7)
+
+    return axes
