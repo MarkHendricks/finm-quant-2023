@@ -389,19 +389,23 @@ def calc_mv_portfolio(mean_rets, cov_matrix, target=None):
 # -----------------------------------------------
 
 
-def plot_capm_regression(assets, market, adj=12):
+def plot_capm_regression(assets, market, ret_cross=False, adj=12, fig=None, ax=None):
     """
     Plot CAPM regressions on a scatter plot.
 
     Args:
         assets : DataFrame of asset returns.
         market : DataFrame of market returns.
+        ret_cross (bool, optional): Return the cross-sectional regression results. Defaults to False.
         adj (int, optional): Annualization. Defaults to 12.
+        fig (optional): Figure object. Defaults to None.
+        ax (optional): Axes object. Defaults to None.
 
     Returns:
-        fig, ax: Figure and axes objects for the plot.
+        fig, ax, beta_mean: Figure and axes objects for the plot. And, cross-sectional regression results.
     """
-    fig, ax = plt.subplots(figsize=(8, 6))
+    if fig is None and ax is None:
+        fig, ax = plt.subplots(figsize=(8, 6))
     betas = []
     means = []
 
@@ -428,11 +432,14 @@ def plot_capm_regression(assets, market, adj=12):
     ax.set_title("Mean Return vs. Beta")
     ax.set_xlabel("Beta")
     ax.set_ylabel("Mean Return")
-    fig.tight_layout()
-    return fig, ax
+
+    if ret_cross:
+        return fig, ax, beta_mean_regr
+    else:
+        return fig, ax
 
 
-def plot_mv_frontier(rets, delta=2, plot_tan=True, adj=12):
+def plot_mv_frontier(rets, delta=2, plot_tan=True, adj=12, fig=None, ax=None):
     """
     Plot MV frontier, and the tangency and GMV portfolios.
 
@@ -442,6 +449,8 @@ def plot_mv_frontier(rets, delta=2, plot_tan=True, adj=12):
                                 the plot look nicer, and keep the MV frontier within a reasonable range.
         plot_tan (bool, optional): Set to False if the tangency gives an extreme value. Defaults to True.
         adj (int, optional): Annualization. Defaults to 12.
+        fig (optional): Figure object. Defaults to None.
+        ax (optional): Axes object. Defaults to None.
 
     Returns:
         fig, ax: Figure and axes objects for the plot.
@@ -473,7 +482,33 @@ def plot_mv_frontier(rets, delta=2, plot_tan=True, adj=12):
     mv_assets.columns = ["mean", "vol"]
     mv_special.columns = ["mean", "vol"]
 
-    fig, ax = plt.subplots(figsize=(8, 8))
+    if fig is None and ax is None:
+        fig, ax = plt.subplots(figsize=(8, 8))
+
+    colors = [
+        "#348ABD",
+        "#7A68A6",
+        "#A60628",
+        "#467821",
+        "#CF4457",
+        "#188487",
+        "#E24A33",
+        "#ECD078",
+        "#D95B43",
+        "#C02942",
+        "#ECD078",
+        "#D95B43",
+        "#C02942",
+        "#2A044A",
+        "#0B2E59",
+        "#0D6759",
+        "#7AB317",
+        "#A0C55F",
+        "#2A044A",
+        "#0B2E59",
+        "#0D6759",
+    ]
+    ax.set_prop_cycle("color", colors)
 
     ax.plot(
         mv_frame["vol"],
@@ -489,7 +524,7 @@ def plot_mv_frontier(rets, delta=2, plot_tan=True, adj=12):
             mv_special["mean"][0],
             c="g",
             linewidth=3,
-            label="Tangency Portfolio",
+            # label="Tangency Portfolio",
         )
         text = ax.text(
             x=mv_special["vol"][0] + 0.0005,
@@ -505,7 +540,7 @@ def plot_mv_frontier(rets, delta=2, plot_tan=True, adj=12):
         mv_special["mean"][1],
         c="r",
         linewidth=3,
-        label="GMV Portfolio",
+        # label="GMV Portfolio",
     )
     text = ax.text(
         x=mv_special["vol"][1] + 0.0005,
@@ -515,26 +550,16 @@ def plot_mv_frontier(rets, delta=2, plot_tan=True, adj=12):
         c="w",
     )
     text.set_path_effects([PathEffects.withStroke(linewidth=2, foreground="black")])
-    ax.scatter(
-        mv_assets["vol"],
-        mv_assets["mean"],
-        c="b",
-        linewidth=3,
-        label="Individual Assets",
-    )
-
-    for i in range(mv_assets.shape[0]):
-        text = ax.text(
-            x=mv_assets["vol"][i] + 0.0005,
-            y=mv_assets["mean"][i] + 0.0005,
-            s=mv_assets.index[i],
-            fontsize=11,
-            c="w",
+    for _, val in mv_assets.iterrows():
+        ax.scatter(
+            val["vol"],
+            val["mean"],
+            linewidth=3,
+            label=val.name,
         )
-        text.set_path_effects([PathEffects.withStroke(linewidth=2, foreground="black")])
     ax.set_xlabel("Volatility (Annualized)")
     ax.set_ylabel("Mean (Annualized)")
-    fig.tight_layout()
+    ax.legend()
     return fig, ax
 
 
@@ -544,7 +569,7 @@ def plot_pairplot(rets):
     for visualizing the skewness of the returns.
 
     Args:
-        rets (_type_): _description_
+        rets : DataFrame of returns.
 
     Returns:
         axes : Axes object for the plot.
