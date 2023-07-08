@@ -62,6 +62,7 @@ def calc_univariate_regression(y, X, intercept=True, adj=12):
 
     summary["Alpha"] = inter * adj
     summary["Beta"] = beta
+
     down_mod = sm.OLS(y_down, X_down, missing="drop").fit()
     summary["Downside Beta"] = down_mod.params[1] if intercept else down_mod.params[0]
 
